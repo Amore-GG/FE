@@ -275,7 +275,7 @@ export default function ScenarioGenerator({ styleData, onBack, onNext }: Props) 
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="text-2xl font-semibold mb-2">타임라인 / 스토리보드</h2>
-                <p className="text-sm text-muted-foreground">30초 영상을 위한 상세 타임라인을 생성합니다 (5초 간격)</p>
+                <p className="text-sm text-muted-foreground">영상을 위한 상세 타임라인을 생성합니다 (5초 간격)</p>
               </div>
               {timeline.length === 0 && (
                 <Button onClick={handleGenerateTimeline} disabled={isGeneratingTimeline} size="lg">
