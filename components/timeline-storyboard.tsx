@@ -22,6 +22,9 @@ import {
 } from "lucide-react"
 import type { BrandScenarioData, TimelineItem, StoryboardData } from "@/app/page"
 
+const VOICE_API_URL = "http://52.78.108.131:1100"
+const GIGI_VOICE_ID = "uyVNoMrnUku1dZyVEXwD"
+
 type Props = {
   brandScenarioData: BrandScenarioData | null
   onBack: () => void
@@ -242,29 +245,77 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
     setEditingIndex(null)
   }
 
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+
   const handlePlayAudio = async (index: number) => {
-    setPlayingAudioIndex(index)
-
-    const settingsToUse = appliedVoiceSettings || {
-      language,
-      emotion,
-      speed: speed[0],
-      pitch: pitch[0],
-      cloneVoiceFile,
-    }
-
     const voiceType = timeline[index].voiceType || "gigi"
 
-    console.log("Play audio", {
-      index,
-      voiceType,
-      text: timeline[index].dialogue,
-      ...settingsToUse,
-      cloneVoiceFile: settingsToUse.cloneVoiceFile ? "uploaded" : "none",
-    })
+    // 나레이션은 아직 미지원
+    if (voiceType === "narration") {
+      console.log("나레이션 음성은 아직 지원되지 않습니다.")
+      return
+    }
 
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-    setPlayingAudioIndex(null)
+    setPlayingAudioIndex(index)
+
+    try {
+      const requestBody = {
+        text: timeline[index].dialogue,
+        voice_id: GIGI_VOICE_ID,
+        model_id: "eleven_turbo_v2_5",
+        stability: 0.8,
+        similarity_boost: 0.8,
+        style: 0.4,
+        use_speaker_boost: true,
+      }
+
+      const response = await fetch(`${VOICE_API_URL}/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      })
+
+      if (!response.ok) {
+        throw new Error("음성 생성에 실패했습니다.")
+      }
+
+      const data = await response.json()
+
+      if (data.success && data.audio_url) {
+        // 기존 오디오 정지
+        if (audioRef.current) {
+          audioRef.current.pause()
+          audioRef.current = null
+        }
+
+        // audio_url이 상대 경로인 경우 API 서버 URL 붙이기
+        const audioUrl = data.audio_url.startsWith("http")
+          ? data.audio_url
+          : `${VOICE_API_URL}${data.audio_url}`
+
+        // 새 오디오 재생
+        const audio = new Audio(audioUrl)
+        audioRef.current = audio
+
+        audio.onended = () => {
+          setPlayingAudioIndex(null)
+        }
+
+        audio.onerror = () => {
+          console.error("오디오 재생 중 오류 발생")
+          setPlayingAudioIndex(null)
+        }
+
+        await audio.play()
+      } else {
+        throw new Error("음성 응답 형식이 올바르지 않습니다.")
+      }
+    } catch (err) {
+      console.error("음성 생성 실패:", err)
+      setPlayingAudioIndex(null)
+    }
   }
 
   const handleApplyVoiceSettings = () => {
