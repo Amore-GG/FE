@@ -9,7 +9,7 @@ import { Card } from "@/components/ui/card"
 import { Sparkles, RefreshCw, AlertCircle } from "lucide-react"
 import type { BrandScenarioData } from "@/app/page"
 
-const API_BASE_URL = "http://52.78.108.131:3000"
+const API_BASE_URL = "https://gigicreation.store/scenario"
 
 type Props = {
   onNext: (data: BrandScenarioData) => void
@@ -79,7 +79,8 @@ export default function BrandScenarioSetup({ onNext }: Props) {
 
       const data = await response.json()
 
-      if (data.success && data.scenario) {
+      // API 응답: { scenario: "...", brand: "...", query: "..." }
+      if (data.scenario) {
         setScenario(data.scenario)
       } else {
         throw new Error("시나리오 응답 형식이 올바르지 않습니다.")

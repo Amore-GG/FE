@@ -21,10 +21,10 @@ import {
 } from "lucide-react"
 import type { BrandScenarioData, TimelineItem, StoryboardData } from "@/app/page"
 
-const TTS_API_URL = "http://52.78.108.131:1100"
-const IMAGE_API_URL = "http://52.78.108.131:4400"  // z_image
-const QWEN_API_URL = "http://52.78.108.131:4100"
-const SCENARIO_API_URL = "http://52.78.108.131:3000"  // 시나리오 생성
+const TTS_API_URL = "https://gigicreation.store/tts"
+const IMAGE_API_URL = "https://gigicreation.store/zimage"
+const QWEN_API_URL = "https://gigicreation.store/qwen"
+const SCENARIO_API_URL = "https://gigicreation.store/scenario"
 
 type Props = {
   brandScenarioData: BrandScenarioData | null
@@ -176,37 +176,46 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
             const jsonStr = line.slice(6).trim()
             if (jsonStr && jsonStr !== "[DONE]") {
               try {
-                const sceneData = JSON.parse(jsonStr)
+                const parsed = JSON.parse(jsonStr)
                 
-                // API 응답을 TimelineItem으로 변환
-                const timelineItem: TimelineItem = {
-                  index: sceneData.index,
-                  timestamp: `${formatTime(sceneData.time_start)} - ${formatTime(sceneData.time_end)}`,
-                  timeStart: sceneData.time_start,
-                  timeEnd: sceneData.time_end,
-                  scene: sceneData.t2i_prompt?.background || sceneData.scene_description,
-                  action: sceneData.t2i_prompt?.character_pose_and_gaze || "",
-                  dialogue: sceneData.dialogue,
-                  backgroundSoundsPrompt: sceneData.background_sounds_prompt,
-                  t2iPrompt: sceneData.t2i_prompt ? {
-                    background: sceneData.t2i_prompt.background,
-                    characterPoseAndGaze: sceneData.t2i_prompt.character_pose_and_gaze,
-                    product: sceneData.t2i_prompt.product,
-                    cameraAngle: sceneData.t2i_prompt.camera_angle,
-                  } : undefined,
-                  imageEditPrompt: sceneData.image_edit_prompt ? {
-                    poseChange: sceneData.image_edit_prompt.pose_change,
-                    gazeChange: sceneData.image_edit_prompt.gaze_change,
-                    expression: sceneData.image_edit_prompt.expression,
-                    additionalEdits: sceneData.image_edit_prompt.additional_edits,
-                  } : undefined,
-                  voiceType: "gigi",
-                }
+                // type에 따라 처리
+                if (parsed.type === "metadata") {
+                  console.log("타임테이블 메타데이터:", parsed.data)
+                } else if (parsed.type === "scene") {
+                  const sceneData = parsed.data
+                  
+                  // API 응답을 TimelineItem으로 변환
+                  const timelineItem: TimelineItem = {
+                    index: sceneData.index,
+                    timestamp: `${formatTime(sceneData.time_start)} - ${formatTime(sceneData.time_end)}`,
+                    timeStart: sceneData.time_start,
+                    timeEnd: sceneData.time_end,
+                    scene: sceneData.t2i_prompt?.background || sceneData.scene_description,
+                    action: sceneData.t2i_prompt?.character_pose_and_gaze || "",
+                    dialogue: sceneData.dialogue || "",
+                    backgroundSoundsPrompt: sceneData.background_sounds_prompt,
+                    t2iPrompt: sceneData.t2i_prompt ? {
+                      background: sceneData.t2i_prompt.background,
+                      characterPoseAndGaze: sceneData.t2i_prompt.character_pose_and_gaze,
+                      product: sceneData.t2i_prompt.product,
+                      cameraAngle: sceneData.t2i_prompt.camera_angle,
+                    } : undefined,
+                    imageEditPrompt: sceneData.image_edit_prompt ? {
+                      poseChange: sceneData.image_edit_prompt.pose_change,
+                      gazeChange: sceneData.image_edit_prompt.gaze_change,
+                      expression: sceneData.image_edit_prompt.expression,
+                      additionalEdits: sceneData.image_edit_prompt.additional_edits,
+                    } : undefined,
+                    voiceType: "gigi",
+                  }
 
-                generatedTimeline.push(timelineItem)
-                // 실시간으로 타임라인 업데이트
-                setTimeline([...generatedTimeline])
-                console.log(`장면 ${sceneData.index + 1} 생성 완료`)
+                  generatedTimeline.push(timelineItem)
+                  // 실시간으로 타임라인 업데이트
+                  setTimeline([...generatedTimeline])
+                  console.log(`장면 ${sceneData.index + 1} 생성 완료`)
+                } else if (parsed.type === "complete") {
+                  console.log("타임테이블 생성 완료:", parsed.data)
+                }
               } catch (parseError) {
                 console.error("JSON 파싱 오류:", parseError)
               }
