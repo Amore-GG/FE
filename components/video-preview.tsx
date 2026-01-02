@@ -468,25 +468,34 @@ export default function VideoPreview({ brandScenarioData, storyboardData, onBack
 
               {/* Individual Generate Button */}
               {item.status !== "completed" && !isGeneratingAll && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  onClick={() => generateVideoForItem(index)}
-                  disabled={item.status === "generating" || !item.timelineItem.gigiImage}
-                >
-                  {item.status === "generating" ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      생성 중...
-                    </>
+                <>
+                  {/* 첫 번째이거나 이전 비디오가 완료된 경우에만 버튼 표시 */}
+                  {(index === 0 || videoItems[index - 1]?.status === "completed") ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => generateVideoForItem(index)}
+                      disabled={item.status === "generating" || !item.timelineItem.gigiImage || videoItems.some(v => v.status === "generating")}
+                    >
+                      {item.status === "generating" ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          생성 중...
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-4 h-4 mr-2" />
+                          이 장면 비디오 생성
+                        </>
+                      )}
+                    </Button>
                   ) : (
-                    <>
-                      <Play className="w-4 h-4 mr-2" />
-                      이 장면 비디오 생성
-                    </>
+                    <div className="w-full text-center py-2 text-sm text-muted-foreground">
+                      이전 장면의 비디오를 먼저 생성해주세요
+                    </div>
                   )}
-                </Button>
+                </>
               )}
 
               {/* Error Message */}

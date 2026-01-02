@@ -187,13 +187,15 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
                   const sceneData = parsed.data
                   
                   // API 응답을 TimelineItem으로 변환
+                  // scene_description은 한글 (화면 표시용)
+                  // t2i_prompt는 영어 (이미지 생성 API용)
                   const timelineItem: TimelineItem = {
                     index: sceneData.index,
                     timestamp: `${formatTime(sceneData.time_start)} - ${formatTime(sceneData.time_end)}`,
                     timeStart: sceneData.time_start,
                     timeEnd: sceneData.time_end,
-                    scene: sceneData.t2i_prompt?.background || sceneData.scene_description,
-                    action: sceneData.t2i_prompt?.character_pose_and_gaze || "",
+                    scene: sceneData.scene_description || sceneData.t2i_prompt?.background || "",
+                    action: sceneData.scene_description || "", // 한글 장면 설명 사용
                     dialogue: sceneData.dialogue || "",
                     backgroundSoundsPrompt: sceneData.background_sounds_prompt,
                     t2iPrompt: sceneData.t2i_prompt ? {
@@ -617,8 +619,7 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
         {timeline.length === 0 && (
           <Card className="p-8">
             <div className="text-center">
-              <h2 className="text-2xl font-semibold mb-4">타임라인 생성</h2>
-              <p className="text-muted-foreground mb-6">30초 영상을 위한 상세 타임라인을 생성합니다 (5초 간격)</p>
+              <h2 className="text-2xl font-semibold mb-6">타임라인 생성</h2>
               <Button onClick={handleGenerateTimeline} disabled={isGeneratingTimeline} size="lg">
                 {isGeneratingTimeline ? (
                   <>
@@ -663,14 +664,23 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center gap-3">
                           <ImageIcon className="w-12 h-12 text-muted-foreground/50" />
-                          <Button
-                            onClick={() => handleGenerateImage(index)}
-                            variant="secondary"
-                            size="sm"
-                          >
-                            <Sparkles className="mr-2 h-4 w-4" />
-                            이미지 생성
-                          </Button>
+                          {/* 첫 번째 이미지이거나 이전 이미지가 생성된 경우에만 버튼 활성화 */}
+                          {(index === 0 || timeline[index - 1]?.gigiImage) ? (
+                            <Button
+                              onClick={() => handleGenerateImage(index)}
+                              variant="secondary"
+                              size="sm"
+                              disabled={generatingImageIndex !== null}
+                            >
+                              <Sparkles className="mr-2 h-4 w-4" />
+                              이미지 생성
+                            </Button>
+                          ) : (
+                            <div className="text-center">
+                              <p className="text-sm text-muted-foreground">이전 장면의 이미지를</p>
+                              <p className="text-sm text-muted-foreground">먼저 생성해주세요</p>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
