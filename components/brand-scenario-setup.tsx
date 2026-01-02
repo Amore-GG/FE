@@ -9,39 +9,48 @@ import { Card } from "@/components/ui/card"
 import { Sparkles, RefreshCw, AlertCircle } from "lucide-react"
 import type { BrandScenarioData } from "@/app/page"
 
-const API_BASE_URL = "https://gigicreation.store/scenario"
+const API_BASE_URL = "https://gigicreation.store/api/scenario"
 
 type Props = {
   onNext: (data: BrandScenarioData) => void
 }
+
+// 기본 브랜드 목록
+const DEFAULT_BRANDS = ["이니스프리", "에뛰드", "라네즈", "설화수", "헤라", "아이오페"]
 
 export default function BrandScenarioSetup({ onNext }: Props) {
   const [selectedBrand, setSelectedBrand] = useState("")
   const [userPrompt, setUserPrompt] = useState("")
   const [scenario, setScenario] = useState<string | null>(null)
   const [isGenerating, setIsGenerating] = useState(false)
-  const [brands, setBrands] = useState<string[]>([])
-  const [isLoadingBrands, setIsLoadingBrands] = useState(true)
+  // 기본값으로 초기화하여 즉시 표시
+  const [brands, setBrands] = useState<string[]>(DEFAULT_BRANDS)
+  const [isLoadingBrands, setIsLoadingBrands] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // 브랜드 목록 가져오기
+  // 브랜드 목록 가져오기 (백그라운드에서 API 시도)
   useEffect(() => {
     const fetchBrands = async () => {
       try {
-        setIsLoadingBrands(true)
         const response = await fetch(`${API_BASE_URL}/brands`)
+        
         if (!response.ok) {
-          throw new Error("브랜드 목록을 불러오는데 실패했습니다.")
+          return // 실패 시 기본값 유지
         }
+        
         const data = await response.json()
-        setBrands(data.brands || [])
-      } catch (err) {
-        console.error("브랜드 목록 로딩 실패:", err)
-        setError("브랜드 목록을 불러오는데 실패했습니다. 페이지를 새로고침 해주세요.")
-        // 폴백으로 기본 브랜드 목록 사용
-        setBrands(["이니스프리", "에뛰드", "라네즈", "설화수", "헤라", "아이오페"])
-      } finally {
-        setIsLoadingBrands(false)
+        console.log("브랜드 목록 응답:", data)
+        
+        // 응답 형식에 따라 처리
+        if (Array.isArray(data.brands) && data.brands.length > 0) {
+          setBrands(data.brands)
+        } else if (Array.isArray(data) && data.length > 0) {
+          setBrands(data)
+        }
+        // 빈 응답이면 기본값 유지
+      } catch {
+        // API 실패 시 기본값 유지 (이미 설정됨)
+        console.log("브랜드 API 연결 실패, 기본값 사용")
       }
     }
 
@@ -232,19 +241,6 @@ export default function BrandScenarioSetup({ onNext }: Props) {
             </Button>
           )}
 
-          {canGenerate && !scenario && (
-            <Button
-              onClick={() =>
-                onNext({
-                  brandName: selectedBrand,
-                })
-              }
-              variant="outline"
-              className="w-full"
-            >
-              건너뛰기 (기본 시나리오 사용)
-            </Button>
-          )}
         </div>
       </div>
     </div>

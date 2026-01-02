@@ -21,10 +21,10 @@ import {
 } from "lucide-react"
 import type { BrandScenarioData, TimelineItem, StoryboardData } from "@/app/page"
 
-const TTS_API_URL = "https://gigicreation.store/tts"
-const IMAGE_API_URL = "https://gigicreation.store/zimage"
-const QWEN_API_URL = "https://gigicreation.store/qwen"
-const SCENARIO_API_URL = "https://gigicreation.store/scenario"
+const TTS_API_URL = "https://gigicreation.store/api/elevenlabs"
+const IMAGE_API_URL = "https://gigicreation.store/api/zimage"
+const QWEN_API_URL = "https://gigicreation.store/api/qwen"
+const SCENARIO_API_URL = "https://gigicreation.store/api/scenario"
 
 type Props = {
   brandScenarioData: BrandScenarioData | null
@@ -35,6 +35,7 @@ type Props = {
 export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }: Props) {
   const [timeline, setTimeline] = useState<TimelineItem[]>([])
   const [isGeneratingTimeline, setIsGeneratingTimeline] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [regeneratingImageIndex, setRegeneratingImageIndex] = useState<number | null>(null)
@@ -133,6 +134,7 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
     }
 
     setIsGeneratingTimeline(true)
+    setError(null) // 에러 초기화
     setTimeline([]) // 기존 타임라인 초기화
 
     try {
@@ -227,20 +229,7 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
       console.log("타임테이블 생성 완료!", generatedTimeline.length, "개 장면")
     } catch (err) {
       console.error("타임테이블 생성 실패:", err)
-      // 폴백: 기본 타임라인 생성
-      const fallbackTimeline: TimelineItem[] = [
-        {
-          index: 0,
-          timestamp: "0:00 - 0:05",
-          timeStart: 0,
-          timeEnd: 5,
-          scene: "bright morning sunlight streaming through large windows, elegant white marble vanity table",
-          action: "frontal view, looking directly at camera, warm welcoming smile",
-          dialogue: "안녕하세요! 여러분의 뷰티 파트너, 지지입니다.",
-          voiceType: "gigi",
-        },
-      ]
-      setTimeline(fallbackTimeline)
+      setError("타임테이블 생성에 실패했습니다. 다시 시도해주세요.")
     } finally {
       setIsGeneratingTimeline(false)
     }
@@ -667,7 +656,7 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
                         </div>
                       ) : item.gigiImage ? (
                         <img
-                          src={item.gigiImage || "/placeholder.svg"}
+                          src={item.gigiImage}
                           alt={`Scene ${index + 1}`}
                           className="w-full h-full object-cover"
                         />
@@ -1026,6 +1015,13 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
         )}
       </div>
 
+      {/* Error Message */}
+      {error && (
+        <div className="mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-sm">
+          {error}
+        </div>
+      )}
+
       {/* Navigation */}
       <div className="flex gap-4 mt-8">
         <Button onClick={onBack} variant="outline" size="lg" className="flex-1 bg-transparent">
@@ -1033,61 +1029,28 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
           이전 단계
         </Button>
 
-        {timeline.length > 0 ? (
-          <Button
-            onClick={() => {
-              const voiceText = timeline.map((t) => t.dialogue).join("\n")
-              onNext({
-                timeline,
-                voiceSettings: {
-                  text: voiceText,
-                  language: appliedVoiceSettings?.language || language,
-                  emotion: appliedVoiceSettings?.emotion || emotion,
-                  speed: appliedVoiceSettings?.speed ?? speed[0],
-                  pitch: appliedVoiceSettings?.pitch ?? pitch[0],
-                  cloneVoiceFile: (appliedVoiceSettings?.cloneVoiceFile ?? cloneVoiceFile) || undefined,
-                },
-              })
-            }}
-            size="lg"
-            className="flex-1"
-          >
-            비디오 생성하기
-            <Sparkles className="ml-2 h-5 w-5" />
-          </Button>
-        ) : (
-          <Button
-            onClick={() => {
-              const defaultTimeline: TimelineItem[] = [
-                {
-                  index: 0,
-                  timestamp: "0:00 - 0:30",
-                  timeStart: 0,
-                  timeEnd: 30,
-                  scene: "bright studio with soft lighting, clean white background",
-                  action: "frontal view, looking at camera, warm welcoming smile, friendly pose",
-                  dialogue: "안녕하세요, 지지입니다.",
-                  voiceType: "gigi",
-                },
-              ]
-              onNext({
-                timeline: defaultTimeline,
-                voiceSettings: {
-                  text: "안녕하세요, 지지입니다.",
-                  language,
-                  emotion,
-                  speed: speed[0],
-                  pitch: pitch[0],
-                },
-              })
-            }}
-            variant="outline"
-            size="lg"
-            className="flex-1"
-          >
-            건너뛰기
-          </Button>
-        )}
+        <Button
+          onClick={() => {
+            const voiceText = timeline.map((t) => t.dialogue).join("\n")
+            onNext({
+              timeline,
+              voiceSettings: {
+                text: voiceText,
+                language: appliedVoiceSettings?.language || language,
+                emotion: appliedVoiceSettings?.emotion || emotion,
+                speed: appliedVoiceSettings?.speed ?? speed[0],
+                pitch: appliedVoiceSettings?.pitch ?? pitch[0],
+                cloneVoiceFile: (appliedVoiceSettings?.cloneVoiceFile ?? cloneVoiceFile) || undefined,
+              },
+            })
+          }}
+          size="lg"
+          className="flex-1"
+          disabled={timeline.length === 0}
+        >
+          비디오 생성하기
+          <Sparkles className="ml-2 h-5 w-5" />
+        </Button>
       </div>
     </div>
   )
