@@ -14,17 +14,29 @@ export type BrandScenarioData = {
 }
 
 export type TimelineItem = {
+  index: number
   timestamp: string
-  scene: string
-  action: string
+  timeStart: number
+  timeEnd: number
+  scene: string              // scene_description
+  action: string             // character_pose_and_gaze
   dialogue: string
+  backgroundSoundsPrompt?: string
+  t2iPrompt?: {
+    background: string
+    characterPoseAndGaze: string
+    product: string
+    cameraAngle: string
+  }
+  imageEditPrompt?: {
+    poseChange: string
+    gazeChange: string
+    expression: string
+    additionalEdits: string
+  }
   gigiImage?: string
   hairReference?: string
   outfitReference?: string
-  makeupReference?: string
-  hairText?: string
-  outfitText?: string
-  makeupText?: string
   voiceType?: "narration" | "gigi"
 }
 

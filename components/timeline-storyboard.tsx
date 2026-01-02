@@ -17,7 +17,6 @@ import {
   Volume2,
   Play,
   ImageIcon,
-  Copy,
   Mic,
 } from "lucide-react"
 import type { BrandScenarioData, TimelineItem, StoryboardData } from "@/app/page"
@@ -25,6 +24,7 @@ import type { BrandScenarioData, TimelineItem, StoryboardData } from "@/app/page
 const TTS_API_URL = "http://52.78.108.131:1100"
 const IMAGE_API_URL = "http://52.78.108.131:4400"  // z_image
 const QWEN_API_URL = "http://52.78.108.131:4100"
+const SCENARIO_API_URL = "http://52.78.108.131:3000"  // 시나리오 생성
 
 type Props = {
   brandScenarioData: BrandScenarioData | null
@@ -127,56 +127,121 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
   const [generatingImageIndex, setGeneratingImageIndex] = useState<number | null>(null)
 
   const handleGenerateTimeline = async () => {
+    if (!brandScenarioData?.scenario) {
+      console.error("시나리오가 없습니다.")
+      return
+    }
+
     setIsGeneratingTimeline(true)
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+    setTimeline([]) // 기존 타임라인 초기화
 
-    const generatedTimeline: TimelineItem[] = [
-      {
-        timestamp: "0:00 - 0:05",
-        scene: "bright morning sunlight streaming through large windows, elegant white marble vanity table, fresh flowers in crystal vase, soft bokeh background",
-        action: "frontal view, looking directly at camera, warm welcoming smile, waving hand gently, shoulders slightly angled, friendly and approachable pose",
-        dialogue: "안녕하세요! 여러분의 뷰티 파트너, 지지입니다.",
-        voiceType: "gigi",
-      },
-      {
-        timestamp: "0:05 - 0:10",
-        scene: `luxurious ${brandScenarioData?.brandName} cosmetic products on rose gold tray, soft pink silk fabric backdrop, warm studio lighting, minimalist aesthetic`,
-        action: "holding product elegantly in both hands, looking at camera with excited expression, slight head tilt, presenting product at chest level, confident pose",
-        dialogue: `오늘은 ${brandScenarioData?.brandName}의 특별한 신제품을 소개해드릴게요.`,
-        voiceType: "gigi",
-      },
-      {
-        timestamp: "0:10 - 0:15",
-        scene: "close-up of premium skincare bottle with water droplets, fresh green leaves, natural wooden surface, soft diffused daylight",
-        action: "three-quarter view, pointing at product with index finger, informative expression, eyebrows slightly raised, professional presenter pose",
-        dialogue: "피부에 깊은 수분을 전달하고, 자연스러운 광채를 선사합니다.",
-        voiceType: "gigi",
-      },
-      {
-        timestamp: "0:15 - 0:20",
-        scene: "clean beauty studio with soft peach walls, circular mirror with golden frame, cotton pads and beauty tools, gentle afternoon light",
-        action: "side profile view, gently touching cheek with fingertips, eyes looking at mirror, demonstrating application motion, graceful hand movement",
-        dialogue: "이렇게 부드럽게 펴 발라주시면 됩니다.",
-        voiceType: "gigi",
-      },
-      {
-        timestamp: "0:20 - 0:25",
-        scene: "dreamy spa atmosphere with white orchids, smooth pebbles, misty background, calming blue and white color palette, serene mood",
-        action: "close-up face shot, touching glowing skin softly, eyes closed peacefully, serene satisfied smile, chin slightly raised, radiant expression",
-        dialogue: "즉각적으로 촉촉하고 생기있는 피부를 느끼실 수 있어요.",
-        voiceType: "gigi",
-      },
-      {
-        timestamp: "0:25 - 0:30",
-        scene: "sunset golden hour light, elegant outdoor terrace with city skyline, champagne tones, sophisticated and warm farewell atmosphere",
-        action: "frontal view, bright genuine smile, waving goodbye with hand near face, warm eye contact with camera, slight bow, grateful expression",
-        dialogue: "여러분의 아름다움을 응원합니다. 감사합니다!",
-        voiceType: "gigi",
-      },
-    ]
+    try {
+      const response = await fetch(`${SCENARIO_API_URL}/generate-timetable-stream`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          scenario: brandScenarioData.scenario,
+          video_duration: 25,
+          brand: brandScenarioData.brandName,
+        }),
+      })
 
-    setTimeline(generatedTimeline)
-    setIsGeneratingTimeline(false)
+      if (!response.ok) {
+        throw new Error("타임테이블 생성에 실패했습니다.")
+      }
+
+      const reader = response.body?.getReader()
+      if (!reader) {
+        throw new Error("스트림 리더를 생성할 수 없습니다.")
+      }
+
+      const decoder = new TextDecoder()
+      let buffer = ""
+      const generatedTimeline: TimelineItem[] = []
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        
+        // SSE 이벤트 파싱
+        const lines = buffer.split("\n")
+        buffer = lines.pop() || "" // 마지막 불완전한 라인은 버퍼에 유지
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            const jsonStr = line.slice(6).trim()
+            if (jsonStr && jsonStr !== "[DONE]") {
+              try {
+                const sceneData = JSON.parse(jsonStr)
+                
+                // API 응답을 TimelineItem으로 변환
+                const timelineItem: TimelineItem = {
+                  index: sceneData.index,
+                  timestamp: `${formatTime(sceneData.time_start)} - ${formatTime(sceneData.time_end)}`,
+                  timeStart: sceneData.time_start,
+                  timeEnd: sceneData.time_end,
+                  scene: sceneData.t2i_prompt?.background || sceneData.scene_description,
+                  action: sceneData.t2i_prompt?.character_pose_and_gaze || "",
+                  dialogue: sceneData.dialogue,
+                  backgroundSoundsPrompt: sceneData.background_sounds_prompt,
+                  t2iPrompt: sceneData.t2i_prompt ? {
+                    background: sceneData.t2i_prompt.background,
+                    characterPoseAndGaze: sceneData.t2i_prompt.character_pose_and_gaze,
+                    product: sceneData.t2i_prompt.product,
+                    cameraAngle: sceneData.t2i_prompt.camera_angle,
+                  } : undefined,
+                  imageEditPrompt: sceneData.image_edit_prompt ? {
+                    poseChange: sceneData.image_edit_prompt.pose_change,
+                    gazeChange: sceneData.image_edit_prompt.gaze_change,
+                    expression: sceneData.image_edit_prompt.expression,
+                    additionalEdits: sceneData.image_edit_prompt.additional_edits,
+                  } : undefined,
+                  voiceType: "gigi",
+                }
+
+                generatedTimeline.push(timelineItem)
+                // 실시간으로 타임라인 업데이트
+                setTimeline([...generatedTimeline])
+                console.log(`장면 ${sceneData.index + 1} 생성 완료`)
+              } catch (parseError) {
+                console.error("JSON 파싱 오류:", parseError)
+              }
+            }
+          }
+        }
+      }
+
+      console.log("타임테이블 생성 완료!", generatedTimeline.length, "개 장면")
+    } catch (err) {
+      console.error("타임테이블 생성 실패:", err)
+      // 폴백: 기본 타임라인 생성
+      const fallbackTimeline: TimelineItem[] = [
+        {
+          index: 0,
+          timestamp: "0:00 - 0:05",
+          timeStart: 0,
+          timeEnd: 5,
+          scene: "bright morning sunlight streaming through large windows, elegant white marble vanity table",
+          action: "frontal view, looking directly at camera, warm welcoming smile",
+          dialogue: "안녕하세요! 여러분의 뷰티 파트너, 지지입니다.",
+          voiceType: "gigi",
+        },
+      ]
+      setTimeline(fallbackTimeline)
+    } finally {
+      setIsGeneratingTimeline(false)
+    }
+  }
+
+  // 시간 포맷팅 헬퍼 함수
+  const formatTime = (seconds: number): string => {
+    const mins = Math.floor(seconds / 60)
+    const secs = Math.floor(seconds % 60)
+    return `${mins}:${secs.toString().padStart(2, "0")}`
   }
 
   const handleGenerateImage = async (index: number) => {
@@ -276,13 +341,6 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
     // 현재 장면 값으로 편집 패널 세팅
     setHairReference(timeline[index].hairReference || null)
     setOutfitReference(timeline[index].outfitReference || null)
-  }
-
-  const handleCopyPreviousStyle = (index: number) => {
-    if (index <= 0) return
-    const prev = timeline[index - 1]
-    setHairReference(prev.hairReference || null)
-    setOutfitReference(prev.outfitReference || null)
   }
 
   // GPU 메모리 확보를 위한 지연 함수
@@ -703,18 +761,9 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
                 {/* 카드 하단: 스타일 설정 UI (해당 카드에만 열림) */}
                 {editingIndex === index && (
                   <div className="mt-6 pt-4 border-t border-border space-y-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <h3 className="text-base font-semibold">장면 {index + 1} - 지지 스타일 설정</h3>
+                    <h3 className="text-base font-semibold">장면 {index + 1} - 지지 스타일 설정</h3>
 
-                      {index > 0 && (
-                        <Button onClick={() => handleCopyPreviousStyle(index)} variant="outline" size="sm">
-                          <Copy className="mr-2 h-3 w-3" />
-                          이전 스타일 복사
-                        </Button>
-                      )}
-                    </div>
-
-                    <div className="grid md:grid-cols-3 gap-4">
+                    <div className="grid md:grid-cols-2 gap-4">
                       {/* Hair */}
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">머리 스타일</Label>
@@ -1002,7 +1051,10 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
             onClick={() => {
               const defaultTimeline: TimelineItem[] = [
                 {
+                  index: 0,
                   timestamp: "0:00 - 0:30",
+                  timeStart: 0,
+                  timeEnd: 30,
                   scene: "bright studio with soft lighting, clean white background",
                   action: "frontal view, looking at camera, warm welcoming smile, friendly pose",
                   dialogue: "안녕하세요, 지지입니다.",
