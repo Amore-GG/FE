@@ -22,8 +22,9 @@ import {
 } from "lucide-react"
 import type { BrandScenarioData, TimelineItem, StoryboardData } from "@/app/page"
 
-const VOICE_API_URL = "http://52.78.108.131:1100"
-const GIGI_VOICE_ID = "uyVNoMrnUku1dZyVEXwD"
+const TTS_API_URL = "http://52.78.108.131:1100"
+const IMAGE_API_URL = "http://52.78.108.131:4400"  // z_image
+const QWEN_API_URL = "http://52.78.108.131:4100"
 
 type Props = {
   brandScenarioData: BrandScenarioData | null
@@ -60,15 +61,9 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
   // Style refs for currently editing timeline item
   const [hairReference, setHairReference] = useState<string | null>(null)
   const [outfitReference, setOutfitReference] = useState<string | null>(null)
-  const [makeupReference, setMakeupReference] = useState<string | null>(null)
-
-  const [hairText, setHairText] = useState("")
-  const [outfitText, setOutfitText] = useState("")
-  const [makeupText, setMakeupText] = useState("")
 
   const hairInputRef = useRef<HTMLInputElement>(null)
   const outfitInputRef = useRef<HTMLInputElement>(null)
-  const makeupInputRef = useRef<HTMLInputElement>(null)
 
   const getLanguageLabel = (v: string) => {
     switch (v) {
@@ -138,37 +133,43 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
     const generatedTimeline: TimelineItem[] = [
       {
         timestamp: "0:00 - 0:05",
-        scene: "오프닝: 지지가 화면에 등장하며 밝게 인사",
+        scene: "bright morning sunlight streaming through large windows, elegant white marble vanity table, fresh flowers in crystal vase, soft bokeh background",
+        action: "frontal view, looking directly at camera, warm welcoming smile, waving hand gently, shoulders slightly angled, friendly and approachable pose",
         dialogue: "안녕하세요! 여러분의 뷰티 파트너, 지지입니다.",
         voiceType: "gigi",
       },
       {
         timestamp: "0:05 - 0:10",
-        scene: `제품 소개: ${brandScenarioData?.brandName} 신제품을 손에 들고 소개`,
+        scene: `luxurious ${brandScenarioData?.brandName} cosmetic products on rose gold tray, soft pink silk fabric backdrop, warm studio lighting, minimalist aesthetic`,
+        action: "holding product elegantly in both hands, looking at camera with excited expression, slight head tilt, presenting product at chest level, confident pose",
         dialogue: `오늘은 ${brandScenarioData?.brandName}의 특별한 신제품을 소개해드릴게요.`,
         voiceType: "gigi",
       },
       {
         timestamp: "0:10 - 0:15",
-        scene: "제품 특징 강조: 제품의 주요 성분과 효과를 설명",
+        scene: "close-up of premium skincare bottle with water droplets, fresh green leaves, natural wooden surface, soft diffused daylight",
+        action: "three-quarter view, pointing at product with index finger, informative expression, eyebrows slightly raised, professional presenter pose",
         dialogue: "피부에 깊은 수분을 전달하고, 자연스러운 광채를 선사합니다.",
         voiceType: "gigi",
       },
       {
         timestamp: "0:15 - 0:20",
-        scene: "사용법 시연: 제품 사용 방법을 보여줌",
+        scene: "clean beauty studio with soft peach walls, circular mirror with golden frame, cotton pads and beauty tools, gentle afternoon light",
+        action: "side profile view, gently touching cheek with fingertips, eyes looking at mirror, demonstrating application motion, graceful hand movement",
         dialogue: "이렇게 부드럽게 펴 발라주시면 됩니다.",
         voiceType: "gigi",
       },
       {
         timestamp: "0:20 - 0:25",
-        scene: "효과 강조: 사용 후 피부의 변화를 설명",
+        scene: "dreamy spa atmosphere with white orchids, smooth pebbles, misty background, calming blue and white color palette, serene mood",
+        action: "close-up face shot, touching glowing skin softly, eyes closed peacefully, serene satisfied smile, chin slightly raised, radiant expression",
         dialogue: "즉각적으로 촉촉하고 생기있는 피부를 느끼실 수 있어요.",
         voiceType: "gigi",
       },
       {
         timestamp: "0:25 - 0:30",
-        scene: "클로징: 따뜻한 미소로 시청자들에게 인사",
+        scene: "sunset golden hour light, elegant outdoor terrace with city skyline, champagne tones, sophisticated and warm farewell atmosphere",
+        action: "frontal view, bright genuine smile, waving goodbye with hand near face, warm eye contact with camera, slight bow, grateful expression",
         dialogue: "여러분의 아름다움을 응원합니다. 감사합니다!",
         voiceType: "gigi",
       },
@@ -180,19 +181,93 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
 
   const handleGenerateImage = async (index: number) => {
     setGeneratingImageIndex(index)
-    
-    // TODO: 이미지 생성 API 연결 예정
-    await new Promise((resolve) => setTimeout(resolve, 2000))
 
-    const updatedTimeline = [...timeline]
-    // 임시로 placeholder 이미지 설정 (나중에 API 응답으로 대체)
-    updatedTimeline[index] = {
-      ...updatedTimeline[index],
-      gigiImage: `/placeholder.svg?height=400&width=600&query=${encodeURIComponent(updatedTimeline[index].scene)}-${Date.now()}`,
+    try {
+      const sessionId = `scene_${index}_${Date.now()}_${Math.random().toString(36).substring(7)}`
+      const item = timeline[index]
+
+      // ========== Step 1: 배경 이미지 생성 (z_image - 4400) ==========
+      console.log("Step 1: 배경 이미지 생성 시작...")
+      const backgroundResponse = await fetch(`${IMAGE_API_URL}/session/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          prompt: item.scene,
+          negative_prompt: "blurry ugly bad distorted low quality person human",
+          output_filename: "background.png",
+          width: 512,
+          height: 512,
+          steps: 9,
+          cfg: 1.0,
+        }),
+      })
+
+      if (!backgroundResponse.ok) {
+        throw new Error("배경 이미지 생성 실패")
+      }
+
+      const backgroundData = await backgroundResponse.json()
+      if (!backgroundData.success) {
+        throw new Error("배경 이미지 생성 응답 오류")
+      }
+      console.log("Step 1 완료: 배경 이미지 생성됨")
+
+      // GPU 메모리 확보를 위한 대기 (20초)
+      console.log("GPU 메모리 확보를 위해 20초 대기...")
+      await delay(20000)
+
+      // ========== Step 2: 지지 이미지 생성 (Qwen - /session/edit/gigi) ==========
+      console.log("Step 2: 지지 이미지 생성 시작...")
+      const actionPrompt = item.action || "frontal view, looking at camera, slight smile"
+      const gigiPrompt = `${actionPrompt}, high quality portrait, professional lighting, white background`
+
+      const gigiResult = await generateGigiImage(
+        sessionId,
+        gigiPrompt,
+        "gigi_person.png"
+      )
+
+      if (!gigiResult) {
+        throw new Error("지지 이미지 생성 실패")
+      }
+      console.log("Step 2 완료: 지지 이미지 생성됨")
+
+      // ========== Step 3: 배경 + 지지 합성 (Qwen - /session/edit) ==========
+      console.log("Step 3: 배경과 지지 합성 시작...")
+      const compositePrompt = "Seamlessly place the person from the second image into the background scene of the first image. Maintain natural lighting and shadows. The person should blend naturally with the environment."
+
+      const compositeResult = await editImageWithQwen(
+        sessionId,
+        compositePrompt,
+        "background.png",
+        "final_composite.png",
+        gigiResult
+      )
+
+      if (!compositeResult) {
+        throw new Error("이미지 합성 실패")
+      }
+      console.log("Step 3 완료: 배경 + 지지 합성됨")
+
+      // 최종 이미지 URL 구성
+      const finalImageUrl = `${QWEN_API_URL}/session/${sessionId}/file/${compositeResult}`
+
+      const updatedTimeline = [...timeline]
+      updatedTimeline[index] = {
+        ...updatedTimeline[index],
+        gigiImage: finalImageUrl,
+      }
+
+      setTimeline(updatedTimeline)
+      console.log("이미지 생성 완료!")
+    } catch (err) {
+      console.error("이미지 생성 파이프라인 실패:", err)
+    } finally {
+      setGeneratingImageIndex(null)
     }
-
-    setTimeline(updatedTimeline)
-    setGeneratingImageIndex(null)
   }
 
   const handleStyleScene = (index: number) => {
@@ -201,48 +276,186 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
     // 현재 장면 값으로 편집 패널 세팅
     setHairReference(timeline[index].hairReference || null)
     setOutfitReference(timeline[index].outfitReference || null)
-    setMakeupReference(timeline[index].makeupReference || null)
-    setHairText(timeline[index].hairText || "")
-    setOutfitText(timeline[index].outfitText || "")
-    setMakeupText(timeline[index].makeupText || "")
   }
 
   const handleCopyPreviousStyle = (index: number) => {
     if (index <= 0) return
     const prev = timeline[index - 1]
-    setHairText(prev.hairText || "")
-    setOutfitText(prev.outfitText || "")
-    setMakeupText(prev.makeupText || "")
     setHairReference(prev.hairReference || null)
     setOutfitReference(prev.outfitReference || null)
-    setMakeupReference(prev.makeupReference || null)
+  }
+
+  // GPU 메모리 확보를 위한 지연 함수
+  const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+  // Data URL을 Blob으로 변환하는 헬퍼 함수
+  const dataUrlToBlob = async (dataUrl: string): Promise<Blob> => {
+    const response = await fetch(dataUrl)
+    return response.blob()
+  }
+
+  // Qwen API - 지지 얼굴 기반 이미지 생성 (FormData 사용)
+  const generateGigiImage = async (
+    sessionId: string,
+    prompt: string,
+    outputFilename: string,
+    styleImage?: string | null,  // 헤어 참조 이미지 (Data URL)
+    styleImage2?: string | null  // 옷 참조 이미지 (Data URL)
+  ): Promise<string | null> => {
+    try {
+      console.log(`Qwen 지지 API 호출: ${outputFilename} 생성 중...`)
+      
+      const formData = new FormData()
+      formData.append("session_id", sessionId)
+      formData.append("prompt", prompt)
+      formData.append("output_filename", outputFilename)
+
+      // 스타일 참조 이미지 1 (헤어)
+      if (styleImage) {
+        const blob = await dataUrlToBlob(styleImage)
+        formData.append("style_image", blob, "style_reference_1.png")
+      }
+
+      // 스타일 참조 이미지 2 (옷)
+      if (styleImage2) {
+        const blob = await dataUrlToBlob(styleImage2)
+        formData.append("style_image2", blob, "style_reference_2.png")
+      }
+
+      const response = await fetch(`${QWEN_API_URL}/session/edit/gigi`, {
+        method: "POST",
+        body: formData,
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error("Qwen 지지 API 응답 오류:", errorText)
+        throw new Error("지지 이미지 생성 실패")
+      }
+
+      const data = await response.json()
+      console.log(`Qwen 지지 API 완료: ${data.output_file}`)
+      
+      // Qwen 호출 후 GPU 메모리 정리를 위해 충분히 대기
+      console.log("GPU 메모리 정리를 위해 15초 대기...")
+      await delay(15000)
+      
+      return data.success ? data.output_file : null
+    } catch (err) {
+      console.error("지지 이미지 생성 실패:", err)
+      return null
+    }
+  }
+
+  // Qwen API - 세션 기반 이미지 편집 (JSON 사용) - 합성용
+  const editImageWithQwen = async (
+    sessionId: string,
+    prompt: string,
+    image1Filename: string,
+    outputFilename: string,
+    image2Filename?: string
+  ): Promise<string | null> => {
+    try {
+      console.log(`Qwen 편집 API 호출: ${outputFilename} 생성 중...`)
+      
+      const requestBody: {
+        session_id: string
+        prompt: string
+        image1_filename: string
+        output_filename: string
+        image2_filename?: string
+      } = {
+        session_id: sessionId,
+        prompt,
+        image1_filename: image1Filename,
+        output_filename: outputFilename,
+      }
+
+      if (image2Filename) {
+        requestBody.image2_filename = image2Filename
+      }
+
+      const response = await fetch(`${QWEN_API_URL}/session/edit`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(requestBody),
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error("Qwen 편집 API 응답 오류:", errorText)
+        throw new Error("이미지 편집 실패")
+      }
+
+      const data = await response.json()
+      console.log(`Qwen 편집 API 완료: ${data.output_file}`)
+      
+      // Qwen 호출 후 GPU 메모리 정리를 위해 충분히 대기
+      console.log("GPU 메모리 정리를 위해 15초 대기...")
+      await delay(15000)
+      
+      return data.success ? data.output_file : null
+    } catch (err) {
+      console.error("이미지 편집 실패:", err)
+      return null
+    }
   }
 
   const handleGenerateSceneImage = async () => {
     if (editingIndex === null) return
 
     setRegeneratingImageIndex(editingIndex)
-    await new Promise((resolve) => setTimeout(resolve, 2000))
 
-    const updatedTimeline = [...timeline]
-    const sceneDescription = updatedTimeline[editingIndex].scene
+    try {
+      const sessionId = `styled_${Date.now()}_${Math.random().toString(36).substring(7)}`
+      const item = timeline[editingIndex]
 
-    updatedTimeline[editingIndex] = {
-      ...updatedTimeline[editingIndex],
-      gigiImage: `/placeholder.svg?height=400&width=600&query=${encodeURIComponent(
-        `${sceneDescription} ${hairText} ${outfitText} ${makeupText}`.trim()
-      )}-${Date.now()}`,
-      hairReference: hairReference || undefined,
-      outfitReference: outfitReference || undefined,
-      makeupReference: makeupReference || undefined,
-      hairText: hairText || undefined,
-      outfitText: outfitText || undefined,
-      makeupText: makeupText || undefined,
+      // ========== 스타일링된 지지 이미지 생성 (Qwen - /session/edit/gigi) ==========
+      console.log("스타일링된 지지 이미지 생성 시작...")
+      
+      // 프롬프트 구성: 행동 + 장면 (스타일은 참조 이미지로만 적용)
+      const actionPrompt = item.action || "frontal view, looking at camera, slight smile"
+      const sceneDescription = item.scene || "studio lighting, professional photo"
+      
+      const fullPrompt = `${actionPrompt}, ${sceneDescription}, high quality portrait, professional lighting`
+      
+      console.log("프롬프트:", fullPrompt)
+
+      // 스타일 참조 이미지 전달 (헤어 -> style_image, 옷 -> style_image2)
+      const gigiResult = await generateGigiImage(
+        sessionId,
+        fullPrompt,
+        "gigi_styled.png",
+        hairReference,   // 헤어 참조 이미지
+        outfitReference  // 옷 참조 이미지
+      )
+
+      if (!gigiResult) {
+        throw new Error("스타일링된 지지 이미지 생성 실패")
+      }
+      console.log("스타일링된 지지 이미지 생성 완료!")
+
+      // 최종 이미지 URL 구성
+      const finalImageUrl = `${QWEN_API_URL}/session/${sessionId}/file/${gigiResult}`
+
+      const updatedTimeline = [...timeline]
+      updatedTimeline[editingIndex] = {
+        ...updatedTimeline[editingIndex],
+        gigiImage: finalImageUrl,
+        hairReference: hairReference || undefined,
+        outfitReference: outfitReference || undefined,
+      }
+
+      setTimeline(updatedTimeline)
+      console.log("스타일링 완료!")
+    } catch (err) {
+      console.error("스타일 이미지 생성 파이프라인 실패:", err)
+    } finally {
+      setRegeneratingImageIndex(null)
+      setEditingIndex(null)
     }
-
-    setTimeline(updatedTimeline)
-    setRegeneratingImageIndex(null)
-    setEditingIndex(null)
   }
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -259,17 +472,18 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
     setPlayingAudioIndex(index)
 
     try {
+      const sessionId = `tts_${index}_${Date.now()}`
+      const outputFilename = `tts_${index}_${Date.now()}.mp3`
+
       const requestBody = {
+        session_id: sessionId,
         text: timeline[index].dialogue,
-        voice_id: GIGI_VOICE_ID,
-        model_id: "eleven_turbo_v2_5",
+        output_filename: outputFilename,
         stability: 0.8,
         similarity_boost: 0.8,
-        style: 0.4,
-        use_speaker_boost: true,
       }
 
-      const response = await fetch(`${VOICE_API_URL}/generate`, {
+      const response = await fetch(`${TTS_API_URL}/session/generate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -283,17 +497,15 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
 
       const data = await response.json()
 
-      if (data.success && data.audio_url) {
+      if (data.success && data.filename) {
         // 기존 오디오 정지
         if (audioRef.current) {
           audioRef.current.pause()
           audioRef.current = null
         }
 
-        // audio_url이 상대 경로인 경우 API 서버 URL 붙이기
-        const audioUrl = data.audio_url.startsWith("http")
-          ? data.audio_url
-          : `${VOICE_API_URL}${data.audio_url}`
+        // 오디오 URL 구성 (세션 기반)
+        const audioUrl = `${TTS_API_URL}/session/${sessionId}/audio/${data.filename}`
 
         // 새 오디오 재생
         const audio = new Audio(audioUrl)
@@ -448,8 +660,13 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
                     </div>
 
                     <div>
-                      <div className="text-sm text-muted-foreground mb-1">장면</div>
-                      <div className="font-medium">{item.scene}</div>
+                      <div className="text-sm text-muted-foreground mb-1">배경</div>
+                      <div className="font-medium text-sm">{item.scene}</div>
+                    </div>
+
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-1">행동</div>
+                      <div className="font-medium text-sm text-primary/80">{item.action}</div>
                     </div>
 
                     <div>
@@ -501,12 +718,6 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
                       {/* Hair */}
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">머리 스타일</Label>
-                        <Input
-                          placeholder="예: 웨이브가 있는 긴 머리"
-                          value={hairText}
-                          onChange={(e) => setHairText(e.target.value)}
-                          className="text-sm"
-                        />
                         <input
                           ref={hairInputRef}
                           type="file"
@@ -542,12 +753,6 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
                       {/* Outfit */}
                       <div className="space-y-2">
                         <Label className="text-sm font-medium">옷 스타일</Label>
-                        <Input
-                          placeholder="예: 검정 드레스"
-                          value={outfitText}
-                          onChange={(e) => setOutfitText(e.target.value)}
-                          className="text-sm"
-                        />
                         <input
                           ref={outfitInputRef}
                           type="file"
@@ -570,47 +775,6 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
                         ) : (
                           <Button
                             onClick={() => outfitInputRef.current?.click()}
-                            variant="outline"
-                            size="sm"
-                            className="w-full border-dashed"
-                          >
-                            <Upload className="mr-2 h-3 w-3" />
-                            사진
-                          </Button>
-                        )}
-                      </div>
-
-                      {/* Makeup */}
-                      <div className="space-y-2">
-                        <Label className="text-sm font-medium">메이크업</Label>
-                        <Input
-                          placeholder="예: 선명한 레드 립"
-                          value={makeupText}
-                          onChange={(e) => setMakeupText(e.target.value)}
-                          className="text-sm"
-                        />
-                        <input
-                          ref={makeupInputRef}
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => handleStyleFileUpload(e, setMakeupReference)}
-                          className="hidden"
-                        />
-                        {makeupReference ? (
-                          <div className="relative w-full aspect-video rounded overflow-hidden border">
-                            <img src={makeupReference} alt="Makeup" className="w-full h-full object-cover" />
-                            <Button
-                              onClick={() => setMakeupReference(null)}
-                              size="icon"
-                              variant="destructive"
-                              className="absolute top-1 right-1 h-6 w-6"
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <Button
-                            onClick={() => makeupInputRef.current?.click()}
                             variant="outline"
                             size="sm"
                             className="w-full border-dashed"
@@ -839,7 +1003,8 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
               const defaultTimeline: TimelineItem[] = [
                 {
                   timestamp: "0:00 - 0:30",
-                  scene: "기본 시나리오",
+                  scene: "bright studio with soft lighting, clean white background",
+                  action: "frontal view, looking at camera, warm welcoming smile, friendly pose",
                   dialogue: "안녕하세요, 지지입니다.",
                   voiceType: "gigi",
                 },

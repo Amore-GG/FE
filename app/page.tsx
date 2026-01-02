@@ -16,6 +16,7 @@ export type BrandScenarioData = {
 export type TimelineItem = {
   timestamp: string
   scene: string
+  action: string
   dialogue: string
   gigiImage?: string
   hairReference?: string
