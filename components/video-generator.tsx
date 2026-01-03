@@ -208,18 +208,16 @@ export default function VideoGenerator({ brandScenarioData, storyboardData, vide
               <div className="text-sm text-muted-foreground mb-2">음성 설정</div>
               <div className="bg-muted/30 rounded-lg p-4 space-y-2 text-sm">
                 <div>
-                  <span className="text-muted-foreground">언어:</span>{" "}
-                  <span className="font-medium">
-                    {voiceData?.language === "ko" ? "한국어" : voiceData?.language === "en" ? "영어" : "일본어"}
-                  </span>
+                  <span className="text-muted-foreground">안정성:</span>{" "}
+                  <span className="font-medium">{voiceData?.stability?.toFixed(2) ?? "0.80"}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">감정:</span>{" "}
-                  <span className="font-medium">{voiceData?.emotion === "cheerful" ? "밝고 활기찬" : "차분함"}</span>
+                  <span className="text-muted-foreground">유사도:</span>{" "}
+                  <span className="font-medium">{voiceData?.similarityBoost?.toFixed(2) ?? "0.80"}</span>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">속도:</span>{" "}
-                  <span className="font-medium">{voiceData?.speed.toFixed(1)}x</span>
+                  <span className="text-muted-foreground">스타일:</span>{" "}
+                  <span className="font-medium">{voiceData?.style?.toFixed(2) ?? "0.40"}</span>
                 </div>
               </div>
             </div>

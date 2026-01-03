@@ -49,11 +49,9 @@ export type StoryboardData = {
 
 export type VoiceData = {
   text: string
-  language: string
-  emotion: string
-  speed: number
-  pitch: number
-  cloneVoiceFile?: string
+  stability: number
+  similarityBoost: number
+  style: number
 }
 
 const stepLabels = ["브랜드·시나리오", "타임라인", "비디오 프리뷰", "최종 생성"]

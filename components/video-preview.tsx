@@ -19,7 +19,8 @@ import type { BrandScenarioData, StoryboardData, TimelineItem } from "@/app/page
 const I2V_API_URL = "https://gigicreation.store/api/i2v"
 const MMAUDIO_API_URL = "https://gigicreation.store/api/mmaudio"
 const LATENTSYNC_API_URL = "https://gigicreation.store/api/latentsync"
-const TTS_API_URL = "https://gigicreation.store/api/elevenlabs"
+const TTS_API_URL = "https://gigicreation.store/api/tts"
+const MERGE_API_URL = "https://gigicreation.store/api/merge"
 
 type VideoItem = {
   index: number
@@ -203,9 +204,11 @@ export default function VideoPreview({ brandScenarioData, storyboardData, onBack
       // Step 3: TTS 음성 생성 (대사가 있는 경우)
       // ============================================
       let ttsAudioUrl: string | null = null
+      const voiceType = item.timelineItem.voiceType || "gigi"
+      const hasDialogue = item.timelineItem.dialogue && item.timelineItem.dialogue.trim()
       
-      if (item.timelineItem.dialogue && item.timelineItem.dialogue.trim()) {
-        console.log(`[${index}] Step 3a: TTS 음성 생성 시작`)
+      if (hasDialogue) {
+        console.log(`[${index}] Step 3a: TTS 음성 생성 시작 (voiceType: ${voiceType})`)
         
         const ttsSessionId = `tts_${projectId}`
         const ttsResponse = await fetch(`${TTS_API_URL}/session/generate`, {
@@ -217,8 +220,10 @@ export default function VideoPreview({ brandScenarioData, storyboardData, onBack
             session_id: ttsSessionId,
             text: item.timelineItem.dialogue,
             output_filename: `dialogue_${index}.mp3`,
-            stability: 0.8,
-            similarity_boost: 0.8,
+            stability: storyboardData?.voiceSettings?.stability ?? 0.8,
+            similarity_boost: storyboardData?.voiceSettings?.similarityBoost ?? 0.8,
+            style: storyboardData?.voiceSettings?.style ?? 0.4,
+            use_speaker_boost: true,
           }),
         })
 
@@ -232,12 +237,15 @@ export default function VideoPreview({ brandScenarioData, storyboardData, onBack
       }
 
       // ============================================
-      // Step 4: LatentSync (립싱크 - 대사가 있는 경우만)
+      // Step 4: LatentSync (립싱크 - 지지 목소리인 경우만)
+      // voiceType === "gigi": 립싱크 적용
+      // voiceType === "narration": 립싱크 스킵 (나레이션은 입 안 움직임)
       // ============================================
-      let finalVideoUrl = mmAudioVideoUrl // 대사 없으면 mmaudio 결과가 최종
+      let finalVideoUrl = mmAudioVideoUrl // 기본값: 배경음만 있는 영상
 
-      if (ttsAudioUrl) {
-        console.log(`[${index}] Step 3b: 립싱크 영상 생성 시작`)
+      // 지지 목소리이고 대사가 있는 경우에만 립싱크 적용
+      if (ttsAudioUrl && voiceType === "gigi") {
+        console.log(`[${index}] Step 3b: 립싱크 영상 생성 시작 (지지 목소리)`)
         
         // 배경음 영상과 TTS 오디오 다운로드
         const videoWithBgSound = await fetchFileFromUrl(mmAudioVideoUrl, `scene_${index}_bg.mp4`)
@@ -266,8 +274,66 @@ export default function VideoPreview({ brandScenarioData, storyboardData, onBack
 
         finalVideoUrl = `${LATENTSYNC_API_URL}/output/${lipsyncData.output_file}`
         console.log(`[${index}] 립싱크 완료: ${finalVideoUrl}`)
+      } else if (voiceType === "narration" && ttsAudioUrl) {
+        // ============================================
+        // 나레이션 모드: 영상 + TTS 오디오 믹싱 (립싱크 스킵)
+        // mmaudio 영상(배경음 포함)에 TTS 오디오를 믹싱
+        // ============================================
+        console.log(`[${index}] 나레이션 모드 - 오디오 믹싱 시작`)
+
+        // 세션에 파일 업로드를 위해 파일 다운로드
+        const videoForMerge = await fetchFileFromUrl(mmAudioVideoUrl, `scene_${index}_bg.mp4`)
+        const ttsForMerge = await fetchFileFromUrl(ttsAudioUrl, `dialogue_${index}.mp3`)
+
+        // 세션에 비디오 업로드
+        const videoUploadForm = new FormData()
+        videoUploadForm.append("session_id", projectId)
+        videoUploadForm.append("file", videoForMerge)
+        videoUploadForm.append("filename", `scene_${index}_video.mp4`)
+        
+        await fetch(`${MERGE_API_URL}/session/upload`, {
+          method: "POST",
+          body: videoUploadForm,
+        })
+
+        // 세션에 오디오 업로드
+        const audioUploadForm = new FormData()
+        audioUploadForm.append("session_id", projectId)
+        audioUploadForm.append("file", ttsForMerge)
+        audioUploadForm.append("filename", `scene_${index}_audio.mp3`)
+        
+        await fetch(`${MERGE_API_URL}/session/upload`, {
+          method: "POST",
+          body: audioUploadForm,
+        })
+
+        // 오디오 믹싱 (영상 오디오 + TTS 오디오)
+        const mixResponse = await fetch(`${MERGE_API_URL}/session/merge/audio-mix`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            session_id: projectId,
+            video_filename: `scene_${index}_video.mp4`,
+            audio_filename: `scene_${index}_audio.mp3`,
+            video_volume: 0.3, // 배경음 볼륨 낮춤
+            audio_volume: 1.0, // 나레이션 볼륨 유지
+            output_filename: `scene_${index}_narration.mp4`,
+          }),
+        })
+
+        if (mixResponse.ok) {
+          const mixData = await mixResponse.json()
+          if (mixData.success && mixData.output_file) {
+            finalVideoUrl = `${MERGE_API_URL}/session/${projectId}/file/${mixData.output_file}`
+            console.log(`[${index}] 나레이션 믹싱 완료: ${finalVideoUrl}`)
+          }
+        } else {
+          console.warn(`[${index}] 나레이션 믹싱 실패, 원본 영상 사용`)
+        }
       } else {
-        console.log(`[${index}] 대사 없음 - 립싱크 스킵`)
+        console.log(`[${index}] 대사 없음 - 오디오 믹싱 스킵`)
       }
 
       // All done

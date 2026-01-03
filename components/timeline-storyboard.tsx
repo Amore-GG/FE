@@ -42,22 +42,17 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
 
   // Voice settings (applied snapshot)
   const [appliedVoiceSettings, setAppliedVoiceSettings] = useState<{
-    language: string
-    emotion: string
-    speed: number
-    pitch: number
-    cloneVoiceFile: string | null
+    stability: number
+    similarityBoost: number
+    style: number
   } | null>(null)
   const [isVoiceSettingsApplied, setIsVoiceSettingsApplied] = useState(false)
 
-  // Voice settings (UI)
-  const [language, setLanguage] = useState("ko")
-  const [emotion, setEmotion] = useState("cheerful")
-  const [speed, setSpeed] = useState([1.0])
-  const [pitch, setPitch] = useState([1.0])
-  const [cloneVoiceFile, setCloneVoiceFile] = useState<string | null>(null)
+  // Voice settings (UI) - ElevenLabs API 스펙에 맞춤
+  const [stability, setStability] = useState([0.8])
+  const [similarityBoost, setSimilarityBoost] = useState([0.8])
+  const [style, setStyle] = useState([0.4])
   const [playingAudioIndex, setPlayingAudioIndex] = useState<number | null>(null)
-  const voiceCloneInputRef = useRef<HTMLInputElement>(null)
 
   // Style refs for currently editing timeline item
   const [hairReference, setHairReference] = useState<string | null>(null)
@@ -65,54 +60,6 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
 
   const hairInputRef = useRef<HTMLInputElement>(null)
   const outfitInputRef = useRef<HTMLInputElement>(null)
-
-  const getLanguageLabel = (v: string) => {
-    switch (v) {
-      case "ko":
-        return "한국어"
-      case "en":
-        return "영어"
-      case "ja":
-        return "일본어"
-      case "zh":
-        return "중국어"
-      case "fr":
-        return "프랑스어"
-      case "de":
-        return "독일어"
-      case "es":
-        return "스페인어"
-      default:
-        return v
-    }
-  }
-
-  const getEmotionLabel = (v: string) => {
-    switch (v) {
-      case "neutral":
-        return "차분함"
-      case "cheerful":
-        return "밝고 활기찬"
-      case "warm":
-        return "따뜻한"
-      case "professional":
-        return "전문적인"
-      case "friendly":
-        return "친근한"
-      case "excited":
-        return "열정적인"
-      default:
-        return v
-    }
-  }
-
-  const handleVoiceCloneUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onloadend = () => setCloneVoiceFile(reader.result as string)
-    reader.readAsDataURL(file)
-  }
 
   const handleStyleFileUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -537,8 +484,10 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
         session_id: sessionId,
         text: timeline[index].dialogue,
         output_filename: outputFilename,
-        stability: 0.8,
-        similarity_boost: 0.8,
+        stability: appliedVoiceSettings?.stability ?? stability[0],
+        similarity_boost: appliedVoiceSettings?.similarityBoost ?? similarityBoost[0],
+        style: appliedVoiceSettings?.style ?? style[0],
+        use_speaker_boost: true,
       }
 
       const response = await fetch(`${TTS_API_URL}/session/generate`, {
@@ -590,11 +539,9 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
 
   const handleApplyVoiceSettings = () => {
     setAppliedVoiceSettings({
-      language,
-      emotion,
-      speed: speed[0],
-      pitch: pitch[0],
-      cloneVoiceFile,
+      stability: stability[0],
+      similarityBoost: similarityBoost[0],
+      style: style[0],
     })
     setIsVoiceSettingsApplied(true)
 
@@ -881,121 +828,94 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
               설정으로 재생됩니다.
             </p>
 
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="language" className="text-base font-semibold">
-                    언어
-                  </Label>
-                  <Select value={language} onValueChange={setLanguage}>
-                    <SelectTrigger id="language">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ko">한국어</SelectItem>
-                      <SelectItem value="en">영어</SelectItem>
-                      <SelectItem value="ja">일본어</SelectItem>
-                      <SelectItem value="zh">중국어</SelectItem>
-                      <SelectItem value="fr">프랑스어</SelectItem>
-                      <SelectItem value="de">독일어</SelectItem>
-                      <SelectItem value="es">스페인어</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="emotion" className="text-base font-semibold">
-                    감정
-                  </Label>
-                  <Select value={emotion} onValueChange={setEmotion}>
-                    <SelectTrigger id="emotion">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="neutral">차분함</SelectItem>
-                      <SelectItem value="cheerful">밝고 활기찬</SelectItem>
-                      <SelectItem value="warm">따뜻한</SelectItem>
-                      <SelectItem value="professional">전문적인</SelectItem>
-                      <SelectItem value="friendly">친근한</SelectItem>
-                      <SelectItem value="excited">열정적인</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-base font-semibold">말하기 속도</Label>
-                    <span className="text-sm font-medium text-primary">{speed[0].toFixed(1)}x</span>
+            <div className="space-y-6">
+              {/* Stability */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-base font-semibold">안정성 (Stability)</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      높을수록 일관된 음성, 낮을수록 다양한 표현
+                    </p>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-xs text-muted-foreground">느리게</span>
-                    <Slider value={speed} onValueChange={setSpeed} min={0.5} max={2.0} step={0.1} className="flex-1" />
-                    <span className="text-xs text-muted-foreground">빠르게</span>
-                  </div>
+                  <span className="text-sm font-medium text-primary">{stability[0].toFixed(2)}</span>
                 </div>
-
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-base font-semibold">음높이</Label>
-                    <span className="text-sm font-medium text-primary">{pitch[0].toFixed(1)}</span>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-xs text-muted-foreground">낮음</span>
-                    <Slider value={pitch} onValueChange={setPitch} min={0.5} max={1.5} step={0.1} className="flex-1" />
-                    <span className="text-xs text-muted-foreground">높음</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label className="text-base font-semibold">음성 복제 (선택)</Label>
-                  <p className="text-sm text-muted-foreground">참고할 음성 파일을 업로드하세요.</p>
-
-                  <input
-                    ref={voiceCloneInputRef}
-                    type="file"
-                    accept="audio/*"
-                    onChange={handleVoiceCloneUpload}
-                    className="hidden"
+                <div className="flex items-center gap-4">
+                  <span className="text-xs text-muted-foreground w-12">다양함</span>
+                  <Slider 
+                    value={stability} 
+                    onValueChange={setStability} 
+                    min={0} 
+                    max={1} 
+                    step={0.05} 
+                    className="flex-1" 
                   />
-
-                  {cloneVoiceFile ? (
-                    <div className="flex items-center gap-2 p-4 bg-muted/30 rounded-lg">
-                      <Volume2 className="h-5 w-5 text-primary" />
-                      <span className="text-sm flex-1">음성 파일 업로드됨</span>
-                      <Button onClick={() => setCloneVoiceFile(null)} size="sm" variant="ghost">
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button
-                      onClick={() => voiceCloneInputRef.current?.click()}
-                      variant="outline"
-                      className="w-full h-20 border-dashed"
-                    >
-                      <div className="flex flex-col items-center gap-3">
-                        <Upload className="h-5 w-5" />
-                        <span>음성 파일 업로드</span>
-                      </div>
-                    </Button>
-                  )}
+                  <span className="text-xs text-muted-foreground w-12 text-right">안정적</span>
                 </div>
+              </div>
 
-                <Card className="p-4 bg-muted/30">
-                  <div className="flex items-start gap-3">
-                    <Volume2 className="h-5 w-5 text-primary mt-0.5" />
-                    <div className="space-y-1">
-                      <div className="font-medium text-sm">음성 설정 요약</div>
-                      <div className="text-xs text-muted-foreground">
-                        {getLanguageLabel(language)} | {getEmotionLabel(emotion)} | {speed[0].toFixed(1)}x |{" "}
-                        {pitch[0].toFixed(1)}
-                        {cloneVoiceFile ? " | 음성 복제" : ""}
-                      </div>
+              {/* Similarity Boost */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-base font-semibold">유사도 (Similarity)</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      높을수록 원본 음성에 가깝게 유지
+                    </p>
+                  </div>
+                  <span className="text-sm font-medium text-primary">{similarityBoost[0].toFixed(2)}</span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-xs text-muted-foreground w-12">낮음</span>
+                  <Slider 
+                    value={similarityBoost} 
+                    onValueChange={setSimilarityBoost} 
+                    min={0} 
+                    max={1} 
+                    step={0.05} 
+                    className="flex-1" 
+                  />
+                  <span className="text-xs text-muted-foreground w-12 text-right">높음</span>
+                </div>
+              </div>
+
+              {/* Style */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-base font-semibold">스타일 (Style)</Label>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      높을수록 감정 표현이 풍부해짐
+                    </p>
+                  </div>
+                  <span className="text-sm font-medium text-primary">{style[0].toFixed(2)}</span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <span className="text-xs text-muted-foreground w-12">차분함</span>
+                  <Slider 
+                    value={style} 
+                    onValueChange={setStyle} 
+                    min={0} 
+                    max={1} 
+                    step={0.05} 
+                    className="flex-1" 
+                  />
+                  <span className="text-xs text-muted-foreground w-12 text-right">풍부함</span>
+                </div>
+              </div>
+
+              {/* Summary Card */}
+              <Card className="p-4 bg-muted/30">
+                <div className="flex items-start gap-3">
+                  <Volume2 className="h-5 w-5 text-primary mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="font-medium text-sm">음성 설정 요약</div>
+                    <div className="text-xs text-muted-foreground">
+                      안정성: {stability[0].toFixed(2)} | 유사도: {similarityBoost[0].toFixed(2)} | 스타일: {style[0].toFixed(2)}
                     </div>
                   </div>
-                </Card>
-              </div>
+                </div>
+              </Card>
             </div>
 
             <div className="mt-6">
@@ -1046,11 +966,9 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
               timeline,
               voiceSettings: {
                 text: voiceText,
-                language: appliedVoiceSettings?.language || language,
-                emotion: appliedVoiceSettings?.emotion || emotion,
-                speed: appliedVoiceSettings?.speed ?? speed[0],
-                pitch: appliedVoiceSettings?.pitch ?? pitch[0],
-                cloneVoiceFile: (appliedVoiceSettings?.cloneVoiceFile ?? cloneVoiceFile) || undefined,
+                stability: appliedVoiceSettings?.stability ?? stability[0],
+                similarityBoost: appliedVoiceSettings?.similarityBoost ?? similarityBoost[0],
+                style: appliedVoiceSettings?.style ?? style[0],
               },
             })
           }}
