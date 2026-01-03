@@ -220,21 +220,22 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
     setGeneratingImageIndex(index)
 
     try {
-      const sessionId = `scene_${index}_${Date.now()}_${Math.random().toString(36).substring(7)}`
+      // 세션 ID: 모든 API에서 일관되게 사용
+      const sessionId = `scene_${index}_${Date.now()}`
       const item = timeline[index]
 
-      // ========== Step 1: 배경 이미지 생성 (z_image - 4400) ==========
-      console.log("Step 1: 배경 이미지 생성 시작...")
+      console.log(`\n========== 장면 ${index + 1} 이미지 생성 시작 ==========`)
+      console.log(`세션 ID: ${sessionId}`)
+
+      // ========== Step 1: 배경 이미지 생성 (z_image API) ==========
+      console.log("\n[Step 1] 배경 이미지 생성 (z_image)...")
       
-      // t2iPrompt.background (영어 프롬프트)를 사용, 없으면 기본값
       const backgroundPrompt = item.t2iPrompt?.background || "modern minimalist indoor space with natural lighting, professional studio background"
       console.log("배경 프롬프트:", backgroundPrompt)
       
       const backgroundResponse = await fetch(`${IMAGE_API_URL}/session/generate`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           session_id: sessionId,
           prompt: backgroundPrompt,
@@ -248,36 +249,43 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
       })
 
       if (!backgroundResponse.ok) {
+        const errorText = await backgroundResponse.text()
+        console.error("z_image API 오류:", errorText)
         throw new Error("배경 이미지 생성 실패")
       }
 
       const backgroundData = await backgroundResponse.json()
+      console.log("z_image 응답:", backgroundData)
+      
       if (!backgroundData.success) {
         throw new Error("배경 이미지 생성 응답 오류")
       }
-      console.log("Step 1 완료: 배경 이미지 생성됨")
+      console.log("[Step 1] 완료: background.png 생성됨")
 
-      // GPU 메모리 확보를 위한 대기 (20초)
-      console.log("GPU 메모리 확보를 위해 20초 대기...")
+      // GPU 메모리 확보를 위한 대기
+      console.log("GPU 메모리 정리를 위해 20초 대기...")
       await delay(20000)
 
-      // ========== Step 1.5: 배경 이미지를 Qwen 세션에 업로드 ==========
-      // z_image와 Qwen이 서로 다른 세션 폴더를 사용하므로 배경을 Qwen에 업로드해야 함
-      console.log("Step 1.5: 배경 이미지를 Qwen 세션에 업로드 중...")
+      // ========== Step 2: 배경 이미지를 Qwen 세션에 업로드 ==========
+      console.log("\n[Step 2] 배경 이미지를 Qwen 세션에 업로드...")
       
-      const backgroundImageUrl = `${IMAGE_API_URL}/session/${sessionId}/file/background.png`
-      const bgImageResponse = await fetch(backgroundImageUrl)
+      // z_image에서 배경 이미지 다운로드
+      const bgDownloadUrl = `${IMAGE_API_URL}/session/${sessionId}/file/background.png`
+      console.log("배경 다운로드 URL:", bgDownloadUrl)
       
+      const bgImageResponse = await fetch(bgDownloadUrl)
       if (!bgImageResponse.ok) {
+        console.error("배경 다운로드 실패:", bgImageResponse.status)
         throw new Error("배경 이미지 다운로드 실패")
       }
       
       const bgBlob = await bgImageResponse.blob()
-      const bgFile = new File([bgBlob], "background.png", { type: "image/png" })
+      console.log("배경 이미지 다운로드 완료, 크기:", bgBlob.size, "bytes")
       
+      // Qwen 세션에 업로드
       const uploadFormData = new FormData()
       uploadFormData.append("session_id", sessionId)
-      uploadFormData.append("image", bgFile)
+      uploadFormData.append("image", bgBlob, "background.png")
       uploadFormData.append("filename", "background.png")
       
       const uploadResponse = await fetch(`${QWEN_API_URL}/session/upload`, {
@@ -286,18 +294,20 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
       })
       
       if (!uploadResponse.ok) {
-        console.warn("배경 이미지 Qwen 업로드 실패, 계속 진행...")
-      } else {
-        console.log("Step 1.5 완료: 배경 이미지 Qwen 세션에 업로드됨")
+        const uploadError = await uploadResponse.text()
+        console.error("Qwen 업로드 실패:", uploadError)
+        throw new Error("배경 이미지 Qwen 업로드 실패")
       }
-
-      // ========== Step 2: 지지 이미지 생성 (Qwen - /session/edit/gigi) ==========
-      console.log("Step 2: 지지 이미지 생성 시작...")
       
-      // t2iPrompt.characterPoseAndGaze (영어 프롬프트)를 사용
+      const uploadData = await uploadResponse.json()
+      console.log("Qwen 업로드 응답:", uploadData)
+      console.log("[Step 2] 완료: background.png Qwen 세션에 업로드됨")
+
+      // ========== Step 3: 지지 이미지 생성 (Qwen /session/edit/gigi) ==========
+      console.log("\n[Step 3] 지지 이미지 생성 (Qwen)...")
+      
       const posePrompt = item.t2iPrompt?.characterPoseAndGaze || "frontal view, looking at camera, slight smile"
       
-      // imageEditPrompt에서 표정/포즈 변화 추가
       let expressionDetails = ""
       if (item.imageEditPrompt) {
         const parts = []
@@ -313,36 +323,47 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
       
       console.log("지지 프롬프트:", gigiPrompt)
 
-      const gigiResult = await generateGigiImage(
-        sessionId,
-        gigiPrompt,
-        "gigi_person.png"
-      )
+      const gigiFilename = await generateGigiImage(sessionId, gigiPrompt, "gigi_person.png")
 
-      if (!gigiResult) {
+      if (!gigiFilename) {
         throw new Error("지지 이미지 생성 실패")
       }
-      console.log("Step 2 완료: 지지 이미지 생성됨")
+      console.log("[Step 3] 완료:", gigiFilename, "생성됨")
 
-      // ========== Step 3: 배경 + 지지 합성 (Qwen - /session/edit) ==========
-      console.log("Step 3: 배경과 지지 합성 시작...")
+      // ========== Step 4: 배경 + 지지 합성 (Qwen /session/edit) ==========
+      console.log("\n[Step 4] 배경 + 지지 합성 (Qwen)...")
+      console.log("image1_filename: background.png")
+      console.log("image2_filename:", gigiFilename)
+      
       const compositePrompt = "Seamlessly place the person from the second image into the background scene of the first image. Maintain natural lighting and shadows. The person should blend naturally with the environment."
 
-      const compositeResult = await editImageWithQwen(
+      const compositeFilename = await editImageWithQwen(
         sessionId,
         compositePrompt,
-        "background.png",
-        "final_composite.png",
-        gigiResult
+        "background.png",      // image1: 배경
+        "final_composite.png", // output
+        gigiFilename           // image2: 지지
       )
 
-      if (!compositeResult) {
+      if (!compositeFilename) {
         throw new Error("이미지 합성 실패")
       }
-      console.log("Step 3 완료: 배경 + 지지 합성됨")
+      console.log("[Step 4] 완료:", compositeFilename, "생성됨")
 
-      // 최종 이미지 URL 구성
-      const finalImageUrl = `${QWEN_API_URL}/session/${sessionId}/file/${compositeResult}`
+      // ========== 최종 이미지 URL 구성 ==========
+      const finalImageUrl = `${QWEN_API_URL}/session/${sessionId}/file/${compositeFilename}`
+      console.log("\n최종 이미지 URL:", finalImageUrl)
+
+      // 세션 파일 목록 확인 (디버깅용)
+      try {
+        const filesResponse = await fetch(`${QWEN_API_URL}/session/${sessionId}/files`)
+        if (filesResponse.ok) {
+          const filesData = await filesResponse.json()
+          console.log("Qwen 세션 파일 목록:", filesData)
+        }
+      } catch {
+        console.log("세션 파일 목록 조회 실패 (무시)")
+      }
 
       const updatedTimeline = [...timeline]
       updatedTimeline[index] = {
@@ -351,9 +372,10 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
       }
 
       setTimeline(updatedTimeline)
-      console.log("이미지 생성 완료!")
+      console.log(`\n========== 장면 ${index + 1} 이미지 생성 완료! ==========\n`)
     } catch (err) {
       console.error("이미지 생성 파이프라인 실패:", err)
+      alert(`이미지 생성 실패: ${err instanceof Error ? err.message : "알 수 없는 오류"}`)
     } finally {
       setGeneratingImageIndex(null)
     }
@@ -377,6 +399,7 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
   }
 
   // Qwen API - 지지 얼굴 기반 이미지 생성 (FormData 사용)
+  // POST /session/edit/gigi
   const generateGigiImage = async (
     sessionId: string,
     prompt: string,
@@ -385,7 +408,10 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
     styleImage2?: string | null  // 옷 참조 이미지 (Data URL)
   ): Promise<string | null> => {
     try {
-      console.log(`Qwen 지지 API 호출: ${outputFilename} 생성 중...`)
+      console.log(`\nQwen /session/edit/gigi 호출...`)
+      console.log("session_id:", sessionId)
+      console.log("prompt:", prompt)
+      console.log("output_filename:", outputFilename)
       
       const formData = new FormData()
       formData.append("session_id", sessionId)
@@ -396,12 +422,14 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
       if (styleImage) {
         const blob = await dataUrlToBlob(styleImage)
         formData.append("style_image", blob, "style_reference_1.png")
+        console.log("style_image 첨부됨")
       }
 
       // 스타일 참조 이미지 2 (옷)
       if (styleImage2) {
         const blob = await dataUrlToBlob(styleImage2)
         formData.append("style_image2", blob, "style_reference_2.png")
+        console.log("style_image2 첨부됨")
       }
 
       const response = await fetch(`${QWEN_API_URL}/session/edit/gigi`, {
@@ -411,34 +439,41 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
 
       if (!response.ok) {
         const errorText = await response.text()
-        console.error("Qwen 지지 API 응답 오류:", errorText)
-        throw new Error("지지 이미지 생성 실패")
+        console.error("Qwen /session/edit/gigi 오류:", response.status, errorText)
+        throw new Error(`지지 이미지 생성 실패: ${response.status}`)
       }
 
       const data = await response.json()
-      console.log(`Qwen 지지 API 완료: ${data.output_file}`)
+      console.log("Qwen /session/edit/gigi 응답:", data)
       
-      // Qwen 호출 후 GPU 메모리 정리를 위해 충분히 대기
+      if (!data.success) {
+        console.error("지지 생성 실패:", data.message)
+        return null
+      }
+      
+      // GPU 메모리 정리를 위해 대기
       console.log("GPU 메모리 정리를 위해 15초 대기...")
       await delay(15000)
       
-      return data.success ? data.output_file : null
+      return data.output_file
     } catch (err) {
-      console.error("지지 이미지 생성 실패:", err)
+      console.error("generateGigiImage 오류:", err)
       return null
     }
   }
 
   // Qwen API - 세션 기반 이미지 편집 (JSON 사용) - 합성용
+  // POST /session/edit
   const editImageWithQwen = async (
     sessionId: string,
     prompt: string,
     image1Filename: string,
     outputFilename: string,
-    image2Filename?: string
+    image2Filename?: string,
+    image3Filename?: string
   ): Promise<string | null> => {
     try {
-      console.log(`Qwen 편집 API 호출: ${outputFilename} 생성 중...`)
+      console.log(`\nQwen /session/edit 호출...`)
       
       const requestBody: {
         session_id: string
@@ -446,9 +481,10 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
         image1_filename: string
         output_filename: string
         image2_filename?: string
+        image3_filename?: string | null
       } = {
         session_id: sessionId,
-        prompt,
+        prompt: prompt,
         image1_filename: image1Filename,
         output_filename: outputFilename,
       }
@@ -456,6 +492,14 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
       if (image2Filename) {
         requestBody.image2_filename = image2Filename
       }
+      
+      if (image3Filename) {
+        requestBody.image3_filename = image3Filename
+      } else {
+        requestBody.image3_filename = null
+      }
+
+      console.log("요청 본문:", JSON.stringify(requestBody, null, 2))
 
       const response = await fetch(`${QWEN_API_URL}/session/edit`, {
         method: "POST",
@@ -467,20 +511,25 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
 
       if (!response.ok) {
         const errorText = await response.text()
-        console.error("Qwen 편집 API 응답 오류:", errorText)
-        throw new Error("이미지 편집 실패")
+        console.error("Qwen /session/edit 오류:", response.status, errorText)
+        throw new Error(`Qwen 편집 실패: ${response.status}`)
       }
 
       const data = await response.json()
-      console.log(`Qwen 편집 API 완료: ${data.output_file}`)
+      console.log("Qwen /session/edit 응답:", data)
       
-      // Qwen 호출 후 GPU 메모리 정리를 위해 충분히 대기
+      if (!data.success) {
+        console.error("Qwen 편집 실패:", data.message)
+        return null
+      }
+      
+      // GPU 메모리 정리를 위해 대기
       console.log("GPU 메모리 정리를 위해 15초 대기...")
       await delay(15000)
       
-      return data.success ? data.output_file : null
+      return data.output_file
     } catch (err) {
-      console.error("이미지 편집 실패:", err)
+      console.error("editImageWithQwen 오류:", err)
       return null
     }
   }
