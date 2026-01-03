@@ -74,6 +74,11 @@ export default function BrandScenarioSetup({ onNext }: Props) {
         requestBody.user_query = userPrompt
       }
 
+      console.log("시나리오 생성 요청:", {
+        url: `${API_BASE_URL}/generate`,
+        body: requestBody
+      })
+
       const response = await fetch(`${API_BASE_URL}/generate`, {
         method: "POST",
         headers: {
@@ -83,7 +88,9 @@ export default function BrandScenarioSetup({ onNext }: Props) {
       })
 
       if (!response.ok) {
-        throw new Error("시나리오 생성에 실패했습니다.")
+        const errorText = await response.text()
+        console.error("시나리오 API 오류:", response.status, errorText)
+        throw new Error(`시나리오 생성 실패: ${response.status}`)
       }
 
       const data = await response.json()
