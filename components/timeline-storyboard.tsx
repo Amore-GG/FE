@@ -220,7 +220,7 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
     setGeneratingImageIndex(index)
 
     try {
-      // 세션 ID: 모든 API에서 일관되게 사용
+      // 세션 ID: z_image와 Qwen이 같은 세션 폴더를 공유
       const sessionId = `scene_${index}_${Date.now()}`
       const item = timeline[index]
 
@@ -228,6 +228,7 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
       console.log(`세션 ID: ${sessionId}`)
 
       // ========== Step 1: 배경 이미지 생성 (z_image API) ==========
+      // z_image POST /session/generate → 세션 폴더에 background.png 저장
       console.log("\n[Step 1] 배경 이미지 생성 (z_image)...")
       
       const backgroundPrompt = item.t2iPrompt?.background || "modern minimalist indoor space with natural lighting, professional studio background"
@@ -241,10 +242,11 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
           prompt: backgroundPrompt,
           negative_prompt: "blurry ugly bad distorted low quality person human text watermark",
           output_filename: "background.png",
-          width: 512,
-          height: 512,
+          width: 1024,
+          height: 1024,
           steps: 9,
           cfg: 1.0,
+          seed: null,
         }),
       })
 
@@ -257,54 +259,30 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
       const backgroundData = await backgroundResponse.json()
       console.log("z_image 응답:", backgroundData)
       
-      if (!backgroundData.success) {
+      if (!backgroundData.success || !backgroundData.output_file) {
         throw new Error("배경 이미지 생성 응답 오류")
       }
-      console.log("[Step 1] 완료: background.png 생성됨")
+      
+      console.log("[Step 1] 완료:", backgroundData.output_file, "생성됨 (세션 폴더에 저장)")
+
+      // z_image 세션 파일 목록 확인 (디버깅)
+      try {
+        const zFilesResponse = await fetch(`${IMAGE_API_URL}/session/${sessionId}/files`)
+        if (zFilesResponse.ok) {
+          const zFilesData = await zFilesResponse.json()
+          console.log("z_image 세션 파일 목록:", zFilesData)
+        }
+      } catch {
+        console.log("z_image 세션 파일 목록 조회 실패")
+      }
 
       // GPU 메모리 확보를 위한 대기
       console.log("GPU 메모리 정리를 위해 20초 대기...")
       await delay(20000)
 
-      // ========== Step 2: 배경 이미지를 Qwen 세션에 업로드 ==========
-      console.log("\n[Step 2] 배경 이미지를 Qwen 세션에 업로드...")
-      
-      // z_image에서 배경 이미지 다운로드
-      const bgDownloadUrl = `${IMAGE_API_URL}/session/${sessionId}/file/background.png`
-      console.log("배경 다운로드 URL:", bgDownloadUrl)
-      
-      const bgImageResponse = await fetch(bgDownloadUrl)
-      if (!bgImageResponse.ok) {
-        console.error("배경 다운로드 실패:", bgImageResponse.status)
-        throw new Error("배경 이미지 다운로드 실패")
-      }
-      
-      const bgBlob = await bgImageResponse.blob()
-      console.log("배경 이미지 다운로드 완료, 크기:", bgBlob.size, "bytes")
-      
-      // Qwen 세션에 업로드
-      const uploadFormData = new FormData()
-      uploadFormData.append("session_id", sessionId)
-      uploadFormData.append("image", bgBlob, "background.png")
-      uploadFormData.append("filename", "background.png")
-      
-      const uploadResponse = await fetch(`${QWEN_API_URL}/session/upload`, {
-        method: "POST",
-        body: uploadFormData,
-      })
-      
-      if (!uploadResponse.ok) {
-        const uploadError = await uploadResponse.text()
-        console.error("Qwen 업로드 실패:", uploadError)
-        throw new Error("배경 이미지 Qwen 업로드 실패")
-      }
-      
-      const uploadData = await uploadResponse.json()
-      console.log("Qwen 업로드 응답:", uploadData)
-      console.log("[Step 2] 완료: background.png Qwen 세션에 업로드됨")
-
-      // ========== Step 3: 지지 이미지 생성 (Qwen /session/edit/gigi) ==========
-      console.log("\n[Step 3] 지지 이미지 생성 (Qwen)...")
+      // ========== Step 2: 지지 이미지 생성 (Qwen /session/edit/gigi) ==========
+      // Qwen POST /session/edit/gigi → 같은 세션 폴더에 gigi_person.png 저장
+      console.log("\n[Step 2] 지지 이미지 생성 (Qwen)...")
       
       const posePrompt = item.t2iPrompt?.characterPoseAndGaze || "frontal view, looking at camera, slight smile"
       
@@ -328,10 +306,13 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
       if (!gigiFilename) {
         throw new Error("지지 이미지 생성 실패")
       }
-      console.log("[Step 3] 완료:", gigiFilename, "생성됨")
+      console.log("[Step 2] 완료:", gigiFilename, "생성됨 (세션 폴더에 저장)")
 
-      // ========== Step 4: 배경 + 지지 합성 (Qwen /session/edit) ==========
-      console.log("\n[Step 4] 배경 + 지지 합성 (Qwen)...")
+      // ========== Step 3: 배경 + 지지 합성 (Qwen /session/edit) ==========
+      // Qwen POST /session/edit → 세션 폴더의 이미지들을 합성
+      // image1: background.png (z_image가 생성한 배경)
+      // image2: gigi_person.png (Qwen이 생성한 지지)
+      console.log("\n[Step 3] 배경 + 지지 합성 (Qwen)...")
       console.log("image1_filename: background.png")
       console.log("image2_filename:", gigiFilename)
       
@@ -340,21 +321,17 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
       const compositeFilename = await editImageWithQwen(
         sessionId,
         compositePrompt,
-        "background.png",      // image1: 배경
+        "background.png",      // image1: z_image가 생성한 배경
         "final_composite.png", // output
-        gigiFilename           // image2: 지지
+        gigiFilename           // image2: Qwen이 생성한 지지
       )
 
       if (!compositeFilename) {
         throw new Error("이미지 합성 실패")
       }
-      console.log("[Step 4] 완료:", compositeFilename, "생성됨")
+      console.log("[Step 3] 완료:", compositeFilename, "생성됨")
 
-      // ========== 최종 이미지 URL 구성 ==========
-      const finalImageUrl = `${QWEN_API_URL}/session/${sessionId}/file/${compositeFilename}`
-      console.log("\n최종 이미지 URL:", finalImageUrl)
-
-      // 세션 파일 목록 확인 (디버깅용)
+      // Qwen 세션 파일 목록 확인 (디버깅용)
       try {
         const filesResponse = await fetch(`${QWEN_API_URL}/session/${sessionId}/files`)
         if (filesResponse.ok) {
@@ -364,6 +341,11 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
       } catch {
         console.log("세션 파일 목록 조회 실패 (무시)")
       }
+
+      // ========== 최종 이미지 URL 구성 ==========
+      // Qwen GET /session/{session_id}/file/{filename}
+      const finalImageUrl = `${QWEN_API_URL}/session/${sessionId}/file/${compositeFilename}`
+      console.log("\n최종 이미지 URL:", finalImageUrl)
 
       const updatedTimeline = [...timeline]
       updatedTimeline[index] = {
