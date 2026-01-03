@@ -134,15 +134,40 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
                   const sceneData = parsed.data
                   
                   // API 응답을 TimelineItem으로 변환
-                  // scene_description은 한글 (화면 표시용)
-                  // t2i_prompt는 영어 (이미지 생성 API용)
+                  // scene_description: 전체 장면 설명 (한글)
+                  // t2i_prompt: 이미지 생성용 프롬프트 (영어)
+                  // image_edit_prompt: 행동/표정 변화 (영어)
+                  
+                  // 배경: scene_description 사용 (전체 장면 설명)
+                  const sceneText = sceneData.scene_description || ""
+                  
+                  // 행동: image_edit_prompt의 pose_change, gaze_change, expression 조합
+                  let actionText = ""
+                  if (sceneData.image_edit_prompt) {
+                    const parts = []
+                    if (sceneData.image_edit_prompt.pose_change) {
+                      parts.push(`포즈: ${sceneData.image_edit_prompt.pose_change}`)
+                    }
+                    if (sceneData.image_edit_prompt.gaze_change) {
+                      parts.push(`시선: ${sceneData.image_edit_prompt.gaze_change}`)
+                    }
+                    if (sceneData.image_edit_prompt.expression) {
+                      parts.push(`표정: ${sceneData.image_edit_prompt.expression}`)
+                    }
+                    actionText = parts.join(" / ")
+                  }
+                  // image_edit_prompt 없으면 t2i_prompt의 character_pose_and_gaze 사용
+                  if (!actionText && sceneData.t2i_prompt?.character_pose_and_gaze) {
+                    actionText = sceneData.t2i_prompt.character_pose_and_gaze
+                  }
+
                   const timelineItem: TimelineItem = {
                     index: sceneData.index,
                     timestamp: `${formatTime(sceneData.time_start)} - ${formatTime(sceneData.time_end)}`,
                     timeStart: sceneData.time_start,
                     timeEnd: sceneData.time_end,
-                    scene: sceneData.scene_description || sceneData.t2i_prompt?.background || "",
-                    action: sceneData.scene_description || "", // 한글 장면 설명 사용
+                    scene: sceneText,
+                    action: actionText,
                     dialogue: sceneData.dialogue || "",
                     backgroundSoundsPrompt: sceneData.background_sounds_prompt,
                     t2iPrompt: sceneData.t2i_prompt ? {
@@ -673,19 +698,33 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
                     </div>
 
                     <div>
-                      <div className="text-sm text-muted-foreground mb-1">배경</div>
-                      <div className="font-medium text-sm">{item.scene}</div>
+                      <div className="text-sm text-muted-foreground mb-1">장면 설명</div>
+                      <div className="font-medium text-sm">{item.scene || "(장면 설명 없음)"}</div>
                     </div>
+
+                    {item.t2iPrompt?.background && (
+                      <div>
+                        <div className="text-sm text-muted-foreground mb-1">배경 (이미지 생성용)</div>
+                        <div className="font-medium text-sm text-muted-foreground/80">{item.t2iPrompt.background}</div>
+                      </div>
+                    )}
 
                     <div>
                       <div className="text-sm text-muted-foreground mb-1">행동</div>
-                      <div className="font-medium text-sm text-primary/80">{item.action}</div>
+                      <div className="font-medium text-sm text-primary/80">{item.action || "(행동 정보 없음)"}</div>
                     </div>
 
                     <div>
                       <div className="text-sm text-muted-foreground mb-1">대사</div>
-                      <div className="text-foreground">&ldquo;{item.dialogue}&rdquo;</div>
+                      <div className="text-foreground">{item.dialogue ? `"${item.dialogue}"` : "(대사 없음)"}</div>
                     </div>
+
+                    {item.t2iPrompt?.product && (
+                      <div>
+                        <div className="text-sm text-muted-foreground mb-1">제품</div>
+                        <div className="font-medium text-sm text-accent-foreground">{item.t2iPrompt.product}</div>
+                      </div>
+                    )}
 
                     <div>
                       <div className="text-sm text-muted-foreground mb-2">음성 유형 선택</div>
