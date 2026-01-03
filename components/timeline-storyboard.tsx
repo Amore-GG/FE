@@ -225,6 +225,11 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
 
       // ========== Step 1: 배경 이미지 생성 (z_image - 4400) ==========
       console.log("Step 1: 배경 이미지 생성 시작...")
+      
+      // t2iPrompt.background (영어 프롬프트)를 사용, 없으면 기본값
+      const backgroundPrompt = item.t2iPrompt?.background || "modern minimalist indoor space with natural lighting, professional studio background"
+      console.log("배경 프롬프트:", backgroundPrompt)
+      
       const backgroundResponse = await fetch(`${IMAGE_API_URL}/session/generate`, {
         method: "POST",
         headers: {
@@ -232,8 +237,8 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
         },
         body: JSON.stringify({
           session_id: sessionId,
-          prompt: item.scene,
-          negative_prompt: "blurry ugly bad distorted low quality person human",
+          prompt: backgroundPrompt,
+          negative_prompt: "blurry ugly bad distorted low quality person human text watermark",
           output_filename: "background.png",
           width: 512,
           height: 512,
@@ -258,8 +263,25 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
 
       // ========== Step 2: 지지 이미지 생성 (Qwen - /session/edit/gigi) ==========
       console.log("Step 2: 지지 이미지 생성 시작...")
-      const actionPrompt = item.action || "frontal view, looking at camera, slight smile"
-      const gigiPrompt = `${actionPrompt}, high quality portrait, professional lighting, white background`
+      
+      // t2iPrompt.characterPoseAndGaze (영어 프롬프트)를 사용
+      const posePrompt = item.t2iPrompt?.characterPoseAndGaze || "frontal view, looking at camera, slight smile"
+      
+      // imageEditPrompt에서 표정/포즈 변화 추가
+      let expressionDetails = ""
+      if (item.imageEditPrompt) {
+        const parts = []
+        if (item.imageEditPrompt.expression) parts.push(item.imageEditPrompt.expression)
+        if (item.imageEditPrompt.poseChange) parts.push(item.imageEditPrompt.poseChange)
+        if (item.imageEditPrompt.gazeChange) parts.push(item.imageEditPrompt.gazeChange)
+        expressionDetails = parts.join(", ")
+      }
+      
+      const gigiPrompt = expressionDetails 
+        ? `${posePrompt}, ${expressionDetails}, high quality portrait, professional lighting`
+        : `${posePrompt}, high quality portrait, professional lighting`
+      
+      console.log("지지 프롬프트:", gigiPrompt)
 
       const gigiResult = await generateGigiImage(
         sessionId,
