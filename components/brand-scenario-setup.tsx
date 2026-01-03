@@ -15,8 +15,8 @@ type Props = {
   onNext: (data: BrandScenarioData) => void
 }
 
-// 기본 브랜드 목록
-const DEFAULT_BRANDS = ["이니스프리", "에뛰드", "라네즈", "설화수", "헤라", "아이오페"]
+// 기본 브랜드 목록 (API 실패 시 폴백)
+const DEFAULT_BRANDS = ["이니스프리", "에뛰드", "라네즈", "설화수", "헤라"]
 
 export default function BrandScenarioSetup({ onNext }: Props) {
   const [selectedBrand, setSelectedBrand] = useState("")

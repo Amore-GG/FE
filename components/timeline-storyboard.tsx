@@ -92,7 +92,7 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
         },
         body: JSON.stringify({
           scenario: brandScenarioData.scenario,
-          video_duration: 25,
+          video_duration: 30,
           brand: brandScenarioData.brandName,
         }),
       })
@@ -260,6 +260,36 @@ export default function TimelineStoryboard({ brandScenarioData, onBack, onNext }
       // GPU 메모리 확보를 위한 대기 (20초)
       console.log("GPU 메모리 확보를 위해 20초 대기...")
       await delay(20000)
+
+      // ========== Step 1.5: 배경 이미지를 Qwen 세션에 업로드 ==========
+      // z_image와 Qwen이 서로 다른 세션 폴더를 사용하므로 배경을 Qwen에 업로드해야 함
+      console.log("Step 1.5: 배경 이미지를 Qwen 세션에 업로드 중...")
+      
+      const backgroundImageUrl = `${IMAGE_API_URL}/session/${sessionId}/file/background.png`
+      const bgImageResponse = await fetch(backgroundImageUrl)
+      
+      if (!bgImageResponse.ok) {
+        throw new Error("배경 이미지 다운로드 실패")
+      }
+      
+      const bgBlob = await bgImageResponse.blob()
+      const bgFile = new File([bgBlob], "background.png", { type: "image/png" })
+      
+      const uploadFormData = new FormData()
+      uploadFormData.append("session_id", sessionId)
+      uploadFormData.append("image", bgFile)
+      uploadFormData.append("filename", "background.png")
+      
+      const uploadResponse = await fetch(`${QWEN_API_URL}/session/upload`, {
+        method: "POST",
+        body: uploadFormData,
+      })
+      
+      if (!uploadResponse.ok) {
+        console.warn("배경 이미지 Qwen 업로드 실패, 계속 진행...")
+      } else {
+        console.log("Step 1.5 완료: 배경 이미지 Qwen 세션에 업로드됨")
+      }
 
       // ========== Step 2: 지지 이미지 생성 (Qwen - /session/edit/gigi) ==========
       console.log("Step 2: 지지 이미지 생성 시작...")
